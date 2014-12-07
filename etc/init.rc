@@ -12,8 +12,8 @@ on early-init
     start healthd
 
 on init
-    export PATH /sbin:/system/bin
-    export LD_LIBRARY_PATH .:/sbin
+    export PATH /sbin:/extra/sbin
+    export LD_LIBRARY_PATH .:/sbin:/extra/sbin
     export ANDROID_ROOT /system
     export ANDROID_DATA /data
     export EXTERNAL_STORAGE /sdcard
@@ -28,6 +28,13 @@ on init
 
     chown root shell /tmp
     chmod 0775 /tmp
+
+    mkdir /extra/
+    mount ext4 /dev/block/mmcblk0p10 /extra wait ro
+    chown root shell /extra
+    chmod 0775 /extra
+    chown root shell /extra/sbin
+    chmod 0775 /extra/sbin
 
     write /proc/sys/kernel/panic_on_oops 1
 
