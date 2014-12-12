@@ -118,7 +118,6 @@ out:
 }
 
 /* Should we use keymaster? */
-/*
 static int keymaster_check_compatibility()
 {
     keymaster_device_t *keymaster_dev = 0;
@@ -146,7 +145,6 @@ out:
     keymaster_close(keymaster_dev);
     return rc;
 }
-*/
 
 /* Create a new keymaster key and store it in this footer */
 static int keymaster_create_key(struct crypt_mnt_ftr *ftr)
@@ -1404,19 +1402,19 @@ static int cryptfs_init_crypt_mnt_ftr(struct crypt_mnt_ftr *ftr)
     ftr->ftr_size = sizeof(struct crypt_mnt_ftr);
     ftr->keysize = KEY_LEN_BYTES;
 
-    // switch (keymaster_check_compatibility()) {
-    // case 1:
-    //     ftr->kdf_type = KDF_SCRYPT_KEYMASTER;
-    //     break;
+    switch (keymaster_check_compatibility()) {
+    case 1:
+        ftr->kdf_type = KDF_SCRYPT_KEYMASTER;
+        break;
 
-    // case 0:
+    case 0:
         ftr->kdf_type = KDF_SCRYPT;
-        // break;
+        break;
 
-    // default:
-    //     printf("keymaster_check_compatibility failed");
-    //     return -1;
-    // }
+    default:
+        printf("keymaster_check_compatibility failed");
+        return -1;
+    }
 
     get_device_scrypt_params(ftr);
 
