@@ -1637,7 +1637,7 @@ bool TWPartition::Wipe_F2FS() {
 
 		gui_print("Formatting %s using mkfs.f2fs...\n", Display_Name.c_str());
 		Find_Actual_Block_Device();
-		command = "mkfs.f2fs -t 1";
+		command = "mkfs.f2fs ";
 		if (!Is_Decrypted && Length != 0) {
 			// Only use length if we're not decrypted
 			char len[32];
