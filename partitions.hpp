@@ -1,5 +1,5 @@
 /*
-	Copyright 2012 bigbiff/Dees_Troy TeamWin
+	Copyright 2014 TeamWin
 	This file is part of TWRP/TeamWin Recovery Project.
 
 	TWRP is free software: you can redistribute it and/or modify
@@ -22,6 +22,7 @@
 #include <vector>
 #include <string>
 #include "twrpDU.hpp"
+#include "tw_atomic.hpp"
 
 #define MAX_FSTAB_LINE_LENGTH 2048
 
@@ -58,7 +59,7 @@ public:
 	bool Can_Repair();                                                        // Checks to see if we have everything needed to be able to repair the current file system
 	uint64_t Get_Max_FileSize();					  	  //get partition maxFileSie
 	bool Repair();                                                            // Repairs the current file system
-	bool Backup(string backup_folder, const unsigned long long *overall_size, const unsigned long long *other_backups_size); // Backs up the partition to the folder specified
+	bool Backup(string backup_folder, const unsigned long long *overall_size, const unsigned long long *other_backups_size, pid_t &tar_fork_pid); // Backs up the partition to the folder specified
 	bool Check_MD5(string restore_folder);                                    // Checks MD5 of a backup
 	bool Restore(string restore_folder, const unsigned long long *total_restore_size, unsigned long long *already_restored_size); // Restores the partition using the backup folder provided
 	unsigned long long Get_Restore_Size(string restore_folder);               // Returns the overall restore size of the backup
@@ -68,6 +69,7 @@ public:
 	void Check_FS_Type();                                                     // Checks the fs type using blkid, does not do anything on MTD / yaffs2 because this crashes on some devices
 	bool Update_Size(bool Display_Error);                                     // Updates size information
 	void Recreate_Media_Folder();                                             // Recreates the /data/media folder
+	bool Flash_Image(string Filename);                                        // Flashes an image to the partition
 
 public:
 	string Current_File_System;                                               // Current file system
@@ -103,19 +105,20 @@ private:
 	bool Wipe_RMRF();                                                         // Uses rm -rf to wipe
 	bool Wipe_F2FS();                                                         // Uses mkfs.f2fs to wipe
 	bool Wipe_Data_Without_Wiping_Media();                                    // Uses rm -rf to wipe but does not wipe /data/media
-	bool Backup_Tar(string backup_folder, const unsigned long long *overall_size, const unsigned long long *other_backups_size); // Backs up using tar for file systems
+	bool Backup_Tar(string backup_folder, const unsigned long long *overall_size, const unsigned long long *other_backups_size, pid_t &tar_fork_pid); // Backs up using tar for file systems
 	bool Backup_DD(string backup_folder);                                     // Backs up using dd for emmc memory types
 	bool Backup_Dump_Image(string backup_folder);                             // Backs up using dump_image for MTD memory types
 	string Get_Restore_File_System(string restore_folder);                    // Returns the file system that was in place at the time of the backup
 	bool Restore_Tar(string restore_folder, string Restore_File_System, const unsigned long long *total_restore_size, unsigned long long *already_restored_size); // Restore using tar for file systems
-	bool Restore_DD(string restore_folder, const unsigned long long *total_restore_size, unsigned long long *already_restored_size); // Restore using dd for emmc memory types
-	bool Restore_Flash_Image(string restore_folder, const unsigned long long *total_restore_size, unsigned long long *already_restored_size); // Restore using flash_image for MTD memory types
+	bool Restore_Image(string restore_folder, const unsigned long long *total_restore_size, unsigned long long *already_restored_size, string Restore_File_System); // Restore using dd for images
 	bool Get_Size_Via_statfs(bool Display_Error);                             // Get Partition size, used, and free space using statfs
 	bool Get_Size_Via_df(bool Display_Error);                                 // Get Partition size, used, and free space using df command
 	bool Make_Dir(string Path, bool Display_Error);                           // Creates a directory if it doesn't already exist
 	bool Find_MTD_Block_Device(string MTD_Name);                              // Finds the mtd block device based on the name from the fstab
 	void Recreate_AndSec_Folder(void);                                        // Recreates the .android_secure folder
 	void Mount_Storage_Retry(void);                                           // Tries multiple times with a half second delay to mount a device in case storage is slow to mount
+	bool Flash_Image_DD(string Filename);                                     // Flashes an image to the partition using dd
+	bool Flash_Image_FI(string Filename);                                     // Flashes an image to the partition using flash_image for mtd nand
 
 private:
 	bool Can_Be_Mounted;                                                      // Indicates that the partition can be mounted
@@ -163,6 +166,7 @@ private:
 	int Format_Block_Size;                                                    // Block size for formatting
 	bool Ignore_Blkid;                                                        // Ignore blkid results due to superblocks lying to us on certain devices / partitions
 	bool Retain_Layout_Version;                                               // Retains the .layout_version file during a wipe (needed on devices like Sony Xperia T where /data and /data/media are separate partitions)
+	bool Can_Flash_Img;                                                       // Indicates if this partition can have images flashed to it via the GUI
 
 friend class TWPartitionManager;
 friend class DataManager;
@@ -208,17 +212,22 @@ public:
 	void UnMount_Main_Partitions(void);                                       // Unmounts system and data if not data/media and boot if boot is mountable
 	int Partition_SDCard(void);                                               // Repartitions the sdcard
 	TWPartition *Get_Default_Storage_Partition();                             // Returns a pointer to a default storage partition
+	int Cancel_Backup();                                                      // Signals partition backup to cancel
 
 	int Fix_Permissions();
 	void Get_Partition_List(string ListType, std::vector<PartitionList> *Partition_List);
 	int Fstab_Processed();                                                    // Indicates if the fstab has been processed or not
 	void Output_Storage_Fstab();                                              // Creates a /cache/recovery/storage.fstab file with a list of all potential storage locations for app use
 	bool Enable_MTP();                                                        // Enables MTP
+	void Add_All_MTP_Storage();                                               // Adds all storage objects for MTP
 	bool Disable_MTP();                                                       // Disables MTP
 	bool Add_MTP_Storage(string Mount_Point);                                 // Adds or removes an MTP Storage partition
 	bool Add_MTP_Storage(unsigned int Storage_ID);                            // Adds or removes an MTP Storage partition
 	bool Remove_MTP_Storage(string Mount_Point);                              // Adds or removes an MTP Storage partition
 	bool Remove_MTP_Storage(unsigned int Storage_ID);                         // Adds or removes an MTP Storage partition
+	bool Flash_Image(string Filename);                                        // Flashes an image to a selected partition from the partition list
+
+	TWAtomicInt stop_backup;
 
 private:
 	void Setup_Settings_Storage_Partition(TWPartition* Part);                 // Sets up settings storage
@@ -234,6 +243,7 @@ private:
 	pid_t mtppid;
 	bool mtp_was_enabled;
 	int mtp_write_fd;
+	pid_t tar_fork_pid;
 
 private:
 	std::vector<TWPartition*> Partitions;                                     // Vector list of all partitions
