@@ -729,35 +729,37 @@ int gui_changePackage(std::string newPackage)
 	return 0;
 }
 
-std::string gui_parse_text(string inText)
+std::string gui_parse_text(std::string str)
 {
-	// Copied from std::string GUIText::parseText(void)
 	// This function parses text for DataManager values encompassed by %value% in the XML
-	static int counter = 0;
-	std::string str = inText;
+	// and string resources (%@resource_name%)
 	size_t pos = 0;
-	size_t next = 0, end = 0;
 
 	while (1)
 	{
-		next = str.find('%', pos);
+		size_t next = str.find('%', pos);
 		if (next == std::string::npos)
 			return str;
 
-		end = str.find('%', next + 1);
+		size_t end = str.find('%', next + 1);
 		if (end == std::string::npos)
 			return str;
 
 		// We have a block of data
-		std::string var = str.substr(next + 1,(end - next) - 1);
-		str.erase(next,(end - next) + 1);
+		std::string var = str.substr(next + 1, (end - next) - 1);
+		str.erase(next, (end - next) + 1);
 
 		if (next + 1 == end)
 			str.insert(next, 1, '%');
 		else
 		{
 			std::string value;
-			if (DataManager::GetValue(var, value) == 0)
+			if (var.size() > 0 && var[0] == '@') {
+				// this is a string resource ("%@string_name%")
+				value = PageManager::GetResources()->FindString(var.substr(1));
+				str.insert(next, value);
+			}
+			else if (DataManager::GetValue(var, value) == 0)
 				str.insert(next, value);
 		}
 
@@ -990,7 +992,10 @@ extern "C" void set_scale_values(float w, float h)
 extern "C" int scale_theme_x(int initial_x)
 {
 	if (scale_theme_w != 1) {
-		return (int) ((float)initial_x * scale_theme_w);
+		int scaled = (float)initial_x * scale_theme_w;
+		if (scaled == 0 && initial_x > 0)
+			return 1;
+		return scaled;
 	}
 	return initial_x;
 }
@@ -998,7 +1003,10 @@ extern "C" int scale_theme_x(int initial_x)
 extern "C" int scale_theme_y(int initial_y)
 {
 	if (scale_theme_h != 1) {
-		return (int) ((float)initial_y * scale_theme_h);
+		int scaled = (float)initial_y * scale_theme_h;
+		if (scaled == 0 && initial_y > 0)
+			return 1;
+		return scaled;
 	}
 	return initial_y;
 }
