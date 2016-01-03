@@ -28,7 +28,8 @@ LOCAL_SRC_FILES := \
     mousecursor.cpp \
     scrolllist.cpp \
     patternpassword.cpp \
-    textbox.cpp
+    textbox.cpp \
+    twmsg.cpp
 
 ifneq ($(TWRP_CUSTOM_KEYBOARD),)
     LOCAL_SRC_FILES += $(TWRP_CUSTOM_KEYBOARD)
@@ -69,7 +70,11 @@ ifeq ($(TW_ROUND_SCREEN), true)
     LOCAL_CFLAGS += -DTW_ROUND_SCREEN
 endif
 
-LOCAL_C_INCLUDES += bionic external/stlport/stlport system/core/libpixelflinger/include
+LOCAL_C_INCLUDES += bionic system/core/libpixelflinger/include
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -lt 23; echo $$?),0)
+    LOCAL_C_INCLUDES += external/stlport/stlport
+endif
+
 LOCAL_CFLAGS += -DTWRES=\"$(TWRES_PATH)\"
 
 include $(BUILD_STATIC_LIBRARY)
@@ -82,7 +87,7 @@ LOCAL_MODULE_CLASS := RECOVERY_EXECUTABLES
 LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)$(TWRES_PATH)
 TWRP_RES := $(commands_recovery_local_path)/gui/devices/common/res/*
 # enable this to use new themes:
-#TWRP_NEW_THEME := true
+TWRP_NEW_THEME := true
 
 ifeq ($(TW_CUSTOM_THEME),)
     ifeq ($(TW_THEME),)
@@ -107,6 +112,7 @@ ifeq ($(TW_CUSTOM_THEME),)
 ifeq ($(TWRP_NEW_THEME),true)
     TWRP_THEME_LOC := $(commands_recovery_local_path)/gui/theme/$(TW_THEME)
     TWRP_RES := $(commands_recovery_local_path)/gui/theme/common/fonts
+    TWRP_RES += $(commands_recovery_local_path)/gui/theme/common/languages
     TWRP_RES += $(commands_recovery_local_path)/gui/theme/common/$(word 1,$(subst _, ,$(TW_THEME))).xml
 # for future copying of used include xmls and fonts:
 # UI_XML := $(TWRP_THEME_LOC)/ui.xml

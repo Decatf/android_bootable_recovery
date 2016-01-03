@@ -69,12 +69,11 @@ using namespace rapidxml;
 // Global values
 static gr_surface gCurtain = NULL;
 static int gGuiInitialized = 0;
-static TWAtomicInt gGuiConsoleRunning;
-static TWAtomicInt gGuiConsoleTerminate;
 static TWAtomicInt gForceRender;
 const int gNoAnimation = 1;
 blanktimer blankTimer;
 int ors_read_fd = -1;
+static FILE* orsout = NULL;
 static float scale_theme_w = 1;
 static float scale_theme_h = 1;
 
@@ -493,13 +492,28 @@ static void setup_ors_command()
 	}
 }
 
+// callback called after a CLI command was executed
+static void ors_command_done()
+{
+	gui_set_FILE(NULL);
+	fclose(orsout);
+	orsout = NULL;
+
+	if (DataManager::GetIntValue("tw_page_done") == 0) {
+		// The select function will return ready to read and the
+		// read function will return errno 19 no such device unless
+		// we set everything up all over again.
+		close(ors_read_fd);
+		setup_ors_command();
+	}
+}
+
 static void ors_command_read()
 {
-	FILE* orsout;
-	char command[1024], result[512];
-	int set_page_done = 0, read_ret = 0;
+	char command[1024];
+	int read_ret = read(ors_read_fd, &command, sizeof(command));
 
-	if ((read_ret = read(ors_read_fd, &command, sizeof(command))) > 0) {
+	if (read_ret > 0) {
 		command[1022] = '\n';
 		command[1023] = '\0';
 		LOGINFO("Command '%s' received\n", command);
@@ -513,55 +527,40 @@ static void ors_command_read()
 			return;
 		}
 		if (DataManager::GetIntValue("tw_busy") != 0) {
-			strcpy(result, "Failed, operation in progress\n");
-			fprintf(orsout, "%s", result);
+			fputs("Failed, operation in progress\n", orsout);
 			LOGINFO("Command cannot be performed, operation in progress.\n");
+			fclose(orsout);
 		} else {
-			if (gui_console_only() == 0) {
-				LOGINFO("Console started successfully\n");
+			if (strlen(command) == 11 && strncmp(command, "dumpstrings", 11) == 0) {
 				gui_set_FILE(orsout);
-				if (strlen(command) > 11 && strncmp(command, "runscript", 9) == 0) {
-					char* filename = command + 11;
-					if (OpenRecoveryScript::copy_script_file(filename) == 0) {
-						LOGERR("Unable to copy script file\n");
-					} else {
-						OpenRecoveryScript::run_script_file();
-					}
-				} else if (strlen(command) > 5 && strncmp(command, "get", 3) == 0) {
-					char* varname = command + 4;
-					string temp;
-					DataManager::GetValue(varname, temp);
-					gui_print("%s = %s\n", varname, temp.c_str());
-				} else if (strlen(command) > 9 && strncmp(command, "decrypt", 7) == 0) {
-					char* pass = command + 8;
-					gui_print("Attempting to decrypt data partition via command line.\n");
-					if (PartitionManager.Decrypt_Device(pass) == 0) {
-						set_page_done = 1;
-					}
-				} else if (OpenRecoveryScript::Insert_ORS_Command(command)) {
-					OpenRecoveryScript::run_script_file();
-				}
-				gui_set_FILE(NULL);
-				gGuiConsoleTerminate.set_value(1);
+				PageManager::GetResources()->DumpStrings();
+				ors_command_done();
+			} else {
+				// mirror output messages
+				gui_set_FILE(orsout);
+				// close orsout and restart listener after command is done
+				OpenRecoveryScript::Call_After_CLI_Command(ors_command_done);
+				// run the command in a threaded action...
+				DataManager::SetValue("tw_action", "twcmd");
+				DataManager::SetValue("tw_action_param", command);
+				// ...and switch back to the current page when finished
+				std::string currentPage = PageManager::GetCurrentPage();
+				DataManager::SetValue("tw_has_action2", "1");
+				DataManager::SetValue("tw_action2", "page");
+				DataManager::SetValue("tw_action2_param", currentPage);
+				DataManager::SetValue("tw_action_text1", gui_lookup("running_recovery_commands", "Running Recovery Commands"));
+				DataManager::SetValue("tw_action_text2", "");
+				gui_changePage("singleaction_page");
+				// now immediately return to the GUI main loop (the action runs in the background thread)
+				// put all things that need to be done after the command is finished into ors_command_done, not here
 			}
-		}
-		fclose(orsout);
-		LOGINFO("Done reading ORS command from command line\n");
-		if (set_page_done) {
-			DataManager::SetValue("tw_page_done", 1);
-		} else {
-			// The select function will return ready to read and the
-			// read function will return errno 19 no such device unless
-			// we set everything up all over again.
-			close(ors_read_fd);
-			setup_ors_command();
 		}
 	} else {
 		LOGINFO("ORS command line read returned an error: %i, %i, %s\n", read_ret, errno, strerror(errno));
 	}
-	return;
 }
 
+// Get and dispatch input events until it's time to draw the next frame
 // This special function will return immediately the first time, but then
 // always returns 1/30th of a second (or immediately if called later) from
 // the last time it was called
@@ -642,7 +641,7 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 	{
 		loopTimer(input_timeout_ms);
 #ifndef TW_OEM_BUILD
-		if (ors_read_fd > 0) {
+		if (ors_read_fd > 0 && !orsout) { // orsout is non-NULL if a command is still running
 			FD_ZERO(&fdset);
 			FD_SET(ors_read_fd, &fdset);
 			timeout.tv_sec = 0;
@@ -653,10 +652,6 @@ static int runPages(const char *page_name, const int stop_on_page_done)
 			}
 		}
 #endif
-
-		if (gGuiConsoleRunning.get_value()) {
-			continue;
-		}
 
 		if (!gForceRender.get_value())
 		{
@@ -742,26 +737,43 @@ int gui_changeOverlay(std::string overlay)
 	return 0;
 }
 
-int gui_changePackage(std::string newPackage)
-{
-	PageManager::SelectPackage(newPackage);
-	gForceRender.set_value(1);
-	return 0;
-}
-
 std::string gui_parse_text(std::string str)
 {
 	// This function parses text for DataManager values encompassed by %value% in the XML
 	// and string resources (%@resource_name%)
-	size_t pos = 0;
+	size_t pos = 0, next, end;
 
 	while (1)
 	{
-		size_t next = str.find('%', pos);
+		next = str.find("{@", pos);
+		if (next == std::string::npos)
+			break;
+
+		end = str.find('}', next + 1);
+		if (end == std::string::npos)
+			break;
+
+		std::string var = str.substr(next + 2, (end - next) - 2);
+		str.erase(next, (end - next) + 1);
+
+		size_t default_loc = var.find('=', 0);
+		std::string lookup;
+		if (default_loc == std::string::npos) {
+			str.insert(next, PageManager::GetResources()->FindString(var));
+		} else {
+			lookup = var.substr(0, default_loc);
+			std::string default_string = var.substr(default_loc + 1, var.size() - default_loc - 1);
+			str.insert(next, PageManager::GetResources()->FindString(lookup, default_string));
+		}
+	}
+	pos = 0;
+	while (1)
+	{
+		next = str.find('%', pos);
 		if (next == std::string::npos)
 			return str;
 
-		size_t end = str.find('%', next + 1);
+		end = str.find('%', next + 1);
 		if (end == std::string::npos)
 			return str;
 
@@ -785,6 +797,10 @@ std::string gui_parse_text(std::string str)
 
 		pos = next + 1;
 	}
+}
+
+std::string gui_lookup(const std::string& resource_name, const std::string& default_value) {
+	return PageManager::GetResources()->FindString(resource_name, default_value);
 }
 
 extern "C" int gui_init(void)
@@ -828,7 +844,7 @@ extern "C" int gui_loadResources(void)
 	{
 		if (PageManager::LoadPackage("TWRP", TWRES "ui.xml", "decrypt"))
 		{
-			LOGERR("Failed to load base packages.\n");
+			gui_err("base_pkg_err=Failed to load base packages.");
 			goto error;
 		}
 		else
@@ -849,10 +865,9 @@ extern "C" int gui_loadResources(void)
 				retry_count--;
 			}
 
-			if (!PartitionManager.Mount_Settings_Storage(false))
+			if (!PartitionManager.Mount_Settings_Storage(true))
 			{
-				LOGERR("Unable to mount %s during GUI startup.\n",
-					   theme_path.c_str());
+				LOGINFO("Unable to mount %s during GUI startup.\n", theme_path.c_str());
 				check = 1;
 			}
 		}
@@ -863,7 +878,7 @@ extern "C" int gui_loadResources(void)
 #endif // ifndef TW_OEM_BUILD
 			if (PageManager::LoadPackage("TWRP", TWRES "ui.xml", "main"))
 			{
-				LOGERR("Failed to load base packages.\n");
+				gui_err("base_pkg_err=Failed to load base packages.");
 				goto error;
 			}
 #ifndef TW_OEM_BUILD
@@ -886,7 +901,7 @@ extern "C" int gui_loadCustomResources(void)
 {
 #ifndef TW_OEM_BUILD
 	if (!PartitionManager.Mount_Settings_Storage(false)) {
-		LOGERR("Unable to mount settings storage during GUI startup.\n");
+		LOGINFO("Unable to mount settings storage during GUI startup.\n");
 		return -1;
 	}
 
@@ -898,7 +913,7 @@ extern "C" int gui_loadCustomResources(void)
 		if (PageManager::ReloadPackage("TWRP", theme_path)) {
 			// Custom theme failed to load, try to load stock theme
 			if (PageManager::ReloadPackage("TWRP", TWRES "ui.xml")) {
-				LOGERR("Failed to load base packages.\n");
+				gui_err("base_pkg_err=Failed to load base packages.");
 				goto error;
 			}
 		}
@@ -924,11 +939,6 @@ extern "C" int gui_startPage(const char *page_name, const int allow_commands, in
 	if (!gGuiInitialized)
 		return -1;
 
-	gGuiConsoleTerminate.set_value(1);
-
-	while (gGuiConsoleRunning.get_value())
-		usleep(10000);
-
 	// Set the default package
 	PageManager::SelectPackage("TWRP");
 
@@ -948,60 +958,6 @@ extern "C" int gui_startPage(const char *page_name, const int allow_commands, in
 	return runPages(page_name, stop_on_page_done);
 }
 
-static void * console_thread(void *cookie __unused)
-{
-	PageManager::SwitchToConsole();
-
-	while (!gGuiConsoleTerminate.get_value())
-	{
-		loopTimer(0);
-
-		if (!gForceRender.get_value())
-		{
-			int ret;
-
-			ret = PageManager::Update();
-			if (ret > 1)
-				PageManager::Render();
-
-			if (ret > 0)
-				flip();
-
-			if (ret < 0)
-				LOGERR("An update request has failed.\n");
-		}
-		else
-		{
-			gForceRender.set_value(0);
-			PageManager::Render();
-			flip();
-		}
-	}
-	gGuiConsoleRunning.set_value(0);
-	gForceRender.set_value(1); // this will kickstart the GUI to render again
-	PageManager::EndConsole();
-	LOGINFO("Console stopping\n");
-	return NULL;
-}
-
-extern "C" int gui_console_only(void)
-{
-	if (!gGuiInitialized)
-		return -1;
-
-	gGuiConsoleTerminate.set_value(0);
-
-	if (gGuiConsoleRunning.get_value())
-		return 0;
-
-	gGuiConsoleRunning.set_value(1);
-
-	// Start by spinning off an input handler.
-	pthread_t t;
-	pthread_create(&t, NULL, console_thread, NULL);
-
-	return 0;
-}
 
 extern "C" void set_scale_values(float w, float h)
 {
