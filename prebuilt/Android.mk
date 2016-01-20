@@ -189,9 +189,22 @@ ifneq ($(wildcard external/pcre/Android.mk),)
     RELINK_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libpcre.so
 endif
 ifeq ($(TW_INCLUDE_NTFS_3G),true)
+ifeq ($(shell test $(CM_PLATFORM_SDK_VERSION) -ge 4; echo $$?),0)
+    RELINK_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/mount.ntfs
+    RELINK_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/fsck.ntfs
+    RELINK_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/mkfs.ntfs
+    RELINK_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libntfs-3g.so
+    RELINK_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libfuse.so
+else
     RELINK_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/ntfs-3g
     RELINK_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/ntfsfix
     RELINK_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/mkntfs
+endif
+endif
+ifeq ($(BOARD_HAS_NO_REAL_SDCARD),)
+    ifeq ($(shell test $(PLATFORM_SDK_VERSION) -gt 22; echo $$?),0)
+        RELINK_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/sgdisk
+    endif
 endif
 
 TWRP_AUTOGEN := $(intermediates)/teamwin
@@ -233,14 +246,25 @@ LOCAL_SRC_FILES := $(LOCAL_MODULE)
 include $(BUILD_PREBUILT)
 
 ifeq ($(BOARD_HAS_NO_REAL_SDCARD),)
+	ifeq ($(shell test $(PLATFORM_SDK_VERSION) -lt 23; echo $$?),0)
+	    #prebuilt, static sgdisk
+	    include $(CLEAR_VARS)
+	    LOCAL_MODULE := sgdisk_static
+	    LOCAL_MODULE_STEM := sgdisk
+	    LOCAL_MODULE_TAGS := eng
+	    LOCAL_MODULE_CLASS := RECOVERY_EXECUTABLES
+	    LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/sbin
+	    LOCAL_SRC_FILES := $(LOCAL_MODULE)
+	    include $(BUILD_PREBUILT)
+	endif
 	#parted
-	include $(CLEAR_VARS)
-	LOCAL_MODULE := parted
-	LOCAL_MODULE_TAGS := eng
-	LOCAL_MODULE_CLASS := RECOVERY_EXECUTABLES
-	LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/sbin
-	LOCAL_SRC_FILES := $(LOCAL_MODULE)
-	include $(BUILD_PREBUILT)
+	#include $(CLEAR_VARS)
+	#LOCAL_MODULE := parted
+	#LOCAL_MODULE_TAGS := eng
+	#LOCAL_MODULE_CLASS := RECOVERY_EXECUTABLES
+	#LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/sbin
+	#LOCAL_SRC_FILES := $(LOCAL_MODULE)
+	#include $(BUILD_PREBUILT)
 endif
 
 # copy license file for OpenAES
@@ -350,7 +374,8 @@ ifneq ($(TW_EXCLUDE_SUPERSU), true)
 
 		#su binary
 		include $(CLEAR_VARS)
-		LOCAL_MODULE := su
+		LOCAL_MODULE := suarm
+		LOCAL_MODULE_STEM := su
 		LOCAL_MODULE_TAGS := eng
 		LOCAL_MODULE_CLASS := RECOVERY_EXECUTABLES
 		LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/supersu

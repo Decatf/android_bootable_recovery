@@ -237,7 +237,8 @@
 		<string name="restore_try_decrypt_s">Trying Decryption</string>
 		<string name="restore_backup_date">Backup made on %tw_restore_file_date%</string>
 		<string name="restore_sel_part">Select Partitions to Restore:</string>
-		<string name="retore_enable_md5_chk">Enable MD5 Verification of Backup Files</string>
+		<string name="restore_enable_md5_chk">Enable MD5 Verification of Backup Files</string>
+		<string name="restore_completed">Restore Complete</string>
 		<string name="swipe_restore">Swipe to Restore</string>
 		<string name="swipe_restore_s">   Restore</string>
 		<string name="rename_backup_hdr">Rename Backup</string>
@@ -378,6 +379,7 @@
 		<string name="inject_twrp_complete">TWRP Injection Complete</string>
 		<string name="swipe_to_confirm">Swipe to Confirm</string>
 		<string name="part_sd_hdr">Partition SD Card</string>
+		<string name="invalid_partsd_sel">You must select a removable device</string>
 		<string name="part_sd_lose">You will lose all files on your SD card!</string>
 		<string name="part_sd_undo">This action cannot be undone!</string>
 		<string name="part_sd_ext_sz">EXT Size:</string>
@@ -435,6 +437,7 @@
 		<string name="decrypt_data_hdr">Decrypt Data</string>
 		<string name="decrypt_data_enter_pass"></string>
 		<string name="decryt_data_failed">Password failed, please try again!</string>
+		<string name="decryt_data_failed_pattern">Pattern failed, please try again!</string>
 		<string name="decrypt_data_enter_pattern">Enter Pattern.</string>
 		<string name="decrypt_data_trying">Trying Decryption</string>
 		<string name="term_hdr">Terminal Command</string>
@@ -557,6 +560,7 @@
 		<string name="flash_done">[IMAGE FLASH COMPLETED]</string>
 		<string name="wiping">Wiping {1}</string>
 		<string name="repair_not_exist">{1} does not exist! Cannot repair!</string>
+		<string name="repairing_using">Repairing {1} using {2}...</string>
 		<string name="unable_repair">Unable to repair {1}.</string>
 		<string name="mount_data_footer">Could not mount /data and unable to find crypto footer.</string>
 		<!-- {1} is the folder name that we could not create, {2} is strerror output -->
@@ -573,7 +577,7 @@
 		<string name="restoring">Restoring</string>
 		<string name="format_data_msg">You may need to reboot recovery to be able to use /data again.</string>
 		<string name="format_data_err">Unable to format to remove encryption.</string>
-		<string name="formating_using">Formatting {1} using {2}...</string>
+		<string name="formatting_using">Formatting {1} using {2}...</string>
 		<string name="unable_to_wipe">Unable to wipe {1}.</string>
 		<string name="remove_all">Removing all files under '{1}'</string>
 		<string name="wiping_data">Wiping data without wiping /data/media ...</string>
@@ -663,5 +667,6 @@
 		<string name="no_real_sdcard">This device does not have a real SD Card! Aborting!</string>
 		<string name="cancel_sideload">Cancelling ADB sideload...</string>
 		<string name="change_fs_err">Error changing file system.</string>
+		<string name="theme_ver_err">Custom theme version does not match TWRP version. Using stock theme.</string>
 	</resources>
 </language>

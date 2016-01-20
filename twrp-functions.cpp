@@ -403,26 +403,19 @@ void TWFunc::htc_dumlock_reflash_recovery_to_boot(void) {
 }
 
 int TWFunc::Recursive_Mkdir(string Path) {
-	string pathCpy = Path;
-	string wholePath;
-	size_t pos = pathCpy.find("/", 2);
-
-	while (pos != string::npos)
-	{
-		wholePath = pathCpy.substr(0, pos);
-		if (!TWFunc::Path_Exists(wholePath)) {
-			if (mkdir(wholePath.c_str(), 0777)) {
-				gui_msg(Msg(msg::kError, "create_folder_strerr=Can not create '{1}' folder ({2})")(wholePath)(strerror(errno)));
+	std::vector<std::string> parts = Split_String(Path, "/", true);
+	std::string cur_path;
+	for (size_t i = 0; i < parts.size(); ++i) {
+		cur_path += "/" + parts[i];
+		if (!TWFunc::Path_Exists(cur_path)) {
+			if (mkdir(cur_path.c_str(), 0777)) {
+				gui_msg(Msg(msg::kError, "create_folder_strerr=Can not create '{1}' folder ({2})")(cur_path)(strerror(errno)));
 				return false;
 			} else {
-				tw_set_default_metadata(wholePath.c_str());
+				tw_set_default_metadata(cur_path.c_str());
 			}
 		}
-
-		pos = pathCpy.find("/", pos + 1);
 	}
-	if (mkdir(wholePath.c_str(), 0777) && errno != EEXIST)
-		return false;
 	return true;
 }
 
@@ -1048,6 +1041,25 @@ void TWFunc::Disable_Stock_Recovery_Replace(void) {
 		}
 		PartitionManager.UnMount_By_Path("/system", false);
 	}
+}
+
+unsigned long long TWFunc::IOCTL_Get_Block_Size(const char* block_device) {
+	unsigned long block_device_size;
+	int ret = 0;
+
+	int fd = open(block_device, O_RDONLY);
+	if (fd < 0) {
+		LOGINFO("Find_Partition_Size: Failed to open '%s', (%s)\n", block_device, strerror(errno));
+	} else {
+		ret = ioctl(fd, BLKGETSIZE, &block_device_size);
+		close(fd);
+		if (ret) {
+			LOGINFO("Find_Partition_Size: ioctl error: (%s)\n", strerror(errno));
+		} else {
+			return (unsigned long long)(block_device_size) * 512LLU;
+		}
+	}
+	return 0;
 }
 
 #endif // ndef BUILD_TWRPTAR_MAIN
