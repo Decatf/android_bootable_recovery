@@ -54,6 +54,7 @@ LOCAL_SRC_FILES += \
     data.cpp \
     partition.cpp \
     partitionmanager.cpp \
+    progresstracking.cpp \
     twinstall.cpp \
     twrp-functions.cpp \
     openrecoveryscript.cpp \
@@ -99,7 +100,8 @@ LOCAL_C_INCLUDES += \
     system/vold \
     system/extras/ext4_utils \
     system/core/adb \
-    system/core/libsparse
+    system/core/libsparse \
+    external/zlib
 
 LOCAL_C_INCLUDES += bionic external/openssl/include $(LOCAL_PATH)/libmincrypt/includes
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -lt 23; echo $$?),0)
@@ -110,7 +112,7 @@ LOCAL_STATIC_LIBRARIES :=
 LOCAL_SHARED_LIBRARIES :=
 
 LOCAL_STATIC_LIBRARIES += libguitwrp
-LOCAL_SHARED_LIBRARIES += libz libc libcutils libstdc++ libtar libblkid libminuitwrp libminadbd libmtdutils libminzip libaosprecovery
+LOCAL_SHARED_LIBRARIES += libz libc libcutils libstdc++ libtar libblkid libminuitwrp libminadbd libmtdutils libminzip libaosprecovery libtwadbbu
 LOCAL_SHARED_LIBRARIES += libcrecovery
 
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -lt 23; echo $$?),0)
@@ -170,6 +172,12 @@ LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/sbin
 
 LOCAL_C_INCLUDES += system/extras/ext4_utils
 
+tw_git_revision := $(shell git -C $(LOCAL_PATH) rev-parse --short=8 HEAD 2>/dev/null)
+ifeq ($(shell git -C $(LOCAL_PATH) diff --quiet; echo $$?),1)
+    tw_git_revision := $(tw_git_revision)-dirty
+endif
+LOCAL_CFLAGS += -DTW_GIT_REVISION='"$(tw_git_revision)"'
+
 #TWRP Build Flags
 ifeq ($(TW_EXCLUDE_MTP),)
     LOCAL_SHARED_LIBRARIES += libtwrpmtp
@@ -180,24 +188,6 @@ ifneq ($(TW_NO_SCREEN_TIMEOUT),)
 endif
 ifeq ($(BOARD_HAS_NO_REAL_SDCARD), true)
     LOCAL_CFLAGS += -DBOARD_HAS_NO_REAL_SDCARD
-endif
-ifneq ($(SP1_NAME),)
-	LOCAL_CFLAGS += -DSP1_NAME=$(SP1_NAME) -DSP1_BACKUP_METHOD=$(SP1_BACKUP_METHOD) -DSP1_MOUNTABLE=$(SP1_MOUNTABLE)
-endif
-ifneq ($(SP1_DISPLAY_NAME),)
-	LOCAL_CFLAGS += -DSP1_DISPLAY_NAME=$(SP1_DISPLAY_NAME)
-endif
-ifneq ($(SP2_NAME),)
-	LOCAL_CFLAGS += -DSP2_NAME=$(SP2_NAME) -DSP2_BACKUP_METHOD=$(SP2_BACKUP_METHOD) -DSP2_MOUNTABLE=$(SP2_MOUNTABLE)
-endif
-ifneq ($(SP2_DISPLAY_NAME),)
-	LOCAL_CFLAGS += -DSP2_DISPLAY_NAME=$(SP2_DISPLAY_NAME)
-endif
-ifneq ($(SP3_NAME),)
-	LOCAL_CFLAGS += -DSP3_NAME=$(SP3_NAME) -DSP3_BACKUP_METHOD=$(SP3_BACKUP_METHOD) -DSP3_MOUNTABLE=$(SP3_MOUNTABLE)
-endif
-ifneq ($(SP3_DISPLAY_NAME),)
-	LOCAL_CFLAGS += -DSP3_DISPLAY_NAME=$(SP3_DISPLAY_NAME)
 endif
 ifneq ($(RECOVERY_SDCARD_ON_DATA),)
 	LOCAL_CFLAGS += -DRECOVERY_SDCARD_ON_DATA
@@ -438,7 +428,7 @@ endif
 LOCAL_CFLAGS += -DTWRES=\"$(TWRES_PATH)\"
 LOCAL_CFLAGS += -DTWHTCD_PATH=\"$(TWHTCD_PATH)\"
 ifeq ($(TW_INCLUDE_NTFS_3G),true)
-ifeq ($(shell test $(CM_PLATFORM_SDK_VERSION) -ge 4; echo $$?),0)
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -gt 22; echo $$?),0)
     LOCAL_ADDITIONAL_DEPENDENCIES += \
         mount.ntfs \
         fsck.ntfs \
@@ -465,6 +455,16 @@ include $(CLEAR_VARS)
 # Create busybox symlinks... gzip and gunzip are excluded because those need to link to pigz instead
 BUSYBOX_LINKS := $(shell cat external/busybox/busybox-full.links)
 exclude := tune2fs mke2fs mkdosfs mkfs.vfat gzip gunzip
+
+# Having /sbin/modprobe present on 32 bit devices with can cause a massive
+# performance problem if the kernel has CONFIG_MODULES=y
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -gt 22; echo $$?),0)
+    ifneq ($(TARGET_ARCH), arm64)
+        ifneq ($(TARGET_ARCH), x86_64)
+            exclude += modprobe
+        endif
+    endif
+endif
 
 # If busybox does not have restorecon, assume it does not have SELinux support.
 # Then, let toolbox provide 'ls' so -Z is available to list SELinux contexts.
@@ -595,6 +595,7 @@ include $(commands_recovery_local_path)/injecttwrp/Android.mk \
     $(commands_recovery_local_path)/etc/Android.mk \
     $(commands_recovery_local_path)/toybox/Android.mk \
     $(commands_recovery_local_path)/simg2img/Android.mk \
+    $(commands_recovery_local_path)/adbbu/Android.mk \
     $(commands_recovery_local_path)/libpixelflinger/Android.mk
 
 ifeq ($(TW_INCLUDE_CRYPTO), true)
