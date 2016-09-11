@@ -13,11 +13,8 @@
 #include <internal.h>
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <time.h>
 #include <sys/param.h>
 #include <sys/types.h>
 
@@ -31,11 +28,7 @@
 #endif
 
 #ifdef HAVE_SELINUX
-# include "selinux/selinux.h"
-#endif
-
-#ifdef __linux__
-#include <linux/fs.h>
+#include "selinux/selinux.h"
 #endif
 
 struct tar_dev
@@ -64,7 +57,7 @@ tar_dev_free(tar_dev_t *tdp)
 
 /* appends a file to the tar archive */
 int
-tar_append_file(TAR *t, const char *realname, const char *savename)
+tar_append_file(TAR *t, char *realname, char *savename)
 {
 	struct stat s;
 	int i;
@@ -87,25 +80,6 @@ tar_append_file(TAR *t, const char *realname, const char *savename)
 		return -1;
 	}
 
-#ifdef FS_COMPR_FL
-	{
-		int fd;
-		long flags;
-		fd = open(realname, O_RDONLY);
-		if (fd >= 0)
-		{
-			if (ioctl(fd, FS_IOC_GETFLAGS, &flags) == 0)
-			{
-				if (flags & FS_COMPR_FL)
-				{
-					s.st_mode |= TH_MODE_COMPRESSED;
-				}
-			}
-			close(fd);
-		}
-	}
-#endif
-
 	/* set header block */
 #ifdef DEBUG
 	puts("    tar_append_file(): setting header block...");
@@ -121,30 +95,22 @@ tar_append_file(TAR *t, const char *realname, const char *savename)
 
 #ifdef HAVE_SELINUX
 	/* get selinux context */
-	if (t->options & TAR_STORE_SELINUX)
-	{
-		if (t->th_buf.selinux_context != NULL)
-		{
+	if(t->options & TAR_STORE_SELINUX) {
+		if(t->th_buf.selinux_context != NULL) {
 			free(t->th_buf.selinux_context);
 			t->th_buf.selinux_context = NULL;
 		}
 
 		security_context_t selinux_context = NULL;
-		if (lgetfilecon(realname, &selinux_context) >= 0)
-		{
+		if (lgetfilecon(realname, &selinux_context) >= 0) {
 			t->th_buf.selinux_context = strdup(selinux_context);
 			printf("setting selinux context: %s\n", selinux_context);
 			freecon(selinux_context);
 		}
 		else
-		{
-#ifdef DEBUG
 			perror("Failed to get selinux context");
-#endif
-		}
 	}
 #endif
-
 	/* check if it's a hardlink */
 #ifdef DEBUG
 	puts("    tar_append_file(): checking inode cache for hardlink...");
@@ -213,13 +179,7 @@ tar_append_file(TAR *t, const char *realname, const char *savename)
 
 	/* print file info */
 	if (t->options & TAR_VERBOSE)
-	{
-		//th_print_long_ls(t);
-		char *f = th_get_pathname(t);
-		printf("%s\n", f);
-		free(f);
-	}
-
+		th_print_long_ls(t);
 
 #ifdef DEBUG
 	puts("    tar_append_file(): writing header");
@@ -269,12 +229,12 @@ tar_append_eof(TAR *t)
 
 /* add file contents to a tarchive */
 int
-tar_append_regfile(TAR *t, const char *realname)
+tar_append_regfile(TAR *t, char *realname)
 {
 	char block[T_BLOCKSIZE];
 	int filefd;
-	int64_t i, size;
-	ssize_t j;
+	int j;
+	size_t size, i;
 
 	filefd = open(realname, O_RDONLY);
 	if (filefd == -1)
@@ -314,59 +274,4 @@ tar_append_regfile(TAR *t, const char *realname)
 	return 0;
 }
 
-/* add file contents to a tarchive */
-int
-tar_append_file_contents(TAR *t, const char *savename, unsigned int mode,
-                         uid_t uid, gid_t gid, void *buf, size_t len)
-{
-	struct stat st;
-
-	memset(&st, 0, sizeof(st));
-	st.st_mode = S_IFREG | (mode & (TH_MODE_COMPRESSED | 0777));
-	st.st_uid = uid;
-	st.st_gid = gid;
-	st.st_mtime = time(NULL);
-	st.st_size = len;
-
-	th_set_from_stat(t, &st);
-	th_set_path(t, savename);
-
-	/* write header */
-	if (th_write(t) != 0)
-	{
-#ifdef DEBUG
-		printf("t->fd = %d\n", t->fd);
-#endif
-		return -1;
-	}
-
-	return tar_append_buffer(t, buf, len);
-}
-
-int
-tar_append_buffer(TAR *t, void *buf, size_t len)
-{
-	char block[T_BLOCKSIZE];
-	int filefd;
-	int i, j;
-	size_t size;
-
-	size = len;
-	for (i = size; i > T_BLOCKSIZE; i -= T_BLOCKSIZE)
-	{
-		if (tar_block_write(t, buf) == -1)
-			return -1;
-		buf = (char *)buf + T_BLOCKSIZE;
-	}
-
-	if (i > 0)
-	{
-		memcpy(block, buf, i);
-		memset(&(block[i]), 0, T_BLOCKSIZE - i);
-		if (tar_block_write(t, &block) == -1)
-			return -1;
-	}
-
-	return 0;
-}
 
