@@ -513,6 +513,12 @@ bool TWPartition::Process_Fstab_Line(const char *fstab_line, bool Display_Error,
 			Wipe_Available_in_GUI = true;
 		}
 #endif
+		if (Mount_Point == "/extra") {
+			Is_Storage = false;
+			Is_Settings_Storage = false;
+			Wipe_Available_in_GUI = false;
+		}
+
 	} else if (Is_Image(Fstab_File_System)) {
 		Find_Actual_Block_Device();
 		Setup_Image();
