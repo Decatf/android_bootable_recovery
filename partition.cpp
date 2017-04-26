@@ -1324,7 +1324,7 @@ bool TWPartition::UnMount(bool Display_Error) {
 		if (never_unmount_system == 1 && Mount_Point == "/system")
 			return true; // Never unmount system if you're not supposed to unmount it
 
-		if (Is_Storage)
+		if (Is_Storage && MTP_Storage_ID > 0)
 			PartitionManager.Remove_MTP_Storage(MTP_Storage_ID);
 
 		if (!Symlink_Mount_Point.empty())
@@ -2216,7 +2216,8 @@ bool TWPartition::Backup_Tar(PartitionSettings *part_settings, pid_t *tar_fork_p
 
 	Backup_FileName = Backup_Name + "." + Current_File_System + ".win";
 	Full_FileName = part_settings->Backup_Folder + "/" + Backup_FileName;
-	tar.has_data_media = Has_Data_Media;
+	if (Has_Data_Media)
+		gui_msg(Msg(msg::kWarning, "backup_storage_warning=Backups of {1} do not include any files in internal storage such as pictures or downloads.")(Display_Name));
 	tar.part_settings = part_settings;
 	tar.backup_exclusions = &backup_exclusions;
 	tar.setdir(Backup_Path);
@@ -2951,4 +2952,12 @@ void TWPartition::Revert_Adopted() {
 #else
 	LOGINFO("Revert_Adopted: no crypto support\n");
 #endif
+}
+
+void TWPartition::Set_Backup_FileName(string fname) {
+	Backup_FileName = fname;
+}
+
+string TWPartition::Get_Backup_Name() {
+	return Backup_Name;
 }
