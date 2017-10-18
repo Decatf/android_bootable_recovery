@@ -1,34 +1,30 @@
 on fs
-    # Create mount-point for ConfigFS USB gadgets
-    # Add standard gadget entries
-    mkdir /config
-    mount configfs none /config
-    mkdir /config/usb_gadget/g1 0770 shell shell
-    write /config/usb_gadget/g1/idVendor 0x04E8
-    write /config/usb_gadget/g1/idProduct 0x6860
-    mkdir /config/usb_gadget/g1/strings/0x409 0770 shell shell
-    write /config/usb_gadget/g1/strings/0x409/serialnumber 0123459876
-    write /config/usb_gadget/g1/strings/0x409/manufacturer Samsung
-    write /config/usb_gadget/g1/strings/0x409/product GT-P7500
-    mkdir /config/usb_gadget/g1/configs/b.1 0770 shell shell
-    mkdir /config/usb_gadget/g1/configs/b.1/strings/0x409 0770 shell shell
-    write /config/usb_gadget/g1/configs/b.1/strings/0x409/configuration "Conf 1"
-    write /config/usb_gadget/g1/configs/b.1/MaxPower 120
+    write /sys/class/android_usb/android0/enable 0
+    write /sys/class/android_usb/android0/idVendor 18D1
+    write /sys/class/android_usb/android0/idProduct D001
+    write /sys/class/android_usb/android0/f_ffs/aliases adb
+    write /sys/class/android_usb/android0/functions adb
+    write /sys/class/android_usb/android0/iManufacturer ${ro.product.manufacturer}
+    write /sys/class/android_usb/android0/iProduct ${ro.product.model}
+    write /sys/class/android_usb/android0/iSerial ${ro.serialno}
 
-    # Create adb+ffs gadget function
-    mkdir /config/usb_gadget/g1/functions/ffs.adb 0770 shell shell
-    mkdir /dev/usb-ffs 0770 shell shell
-    mkdir /dev/usb-ffs/adb 0770 shell shell
-    mount functionfs adb /dev/usb-ffs/adb uid=2000,gid=2000
+on property:sys.usb.config=none
+    write /sys/class/android_usb/android0/enable 0
+    write /sys/class/android_usb/android0/bDeviceClass 0
 
-    # Create MTP and PTP functions
-    mkdir /config/usb_gadget/g1/functions/mtp.gs0 0770 shell shell
-    mkdir /config/usb_gadget/g1/functions/ptp.gs1 0770 shell shell
+on property:sys.usb.config=mass_storage,adb
+    write /sys/class/android_usb/android0/enable 0
+    write /sys/class/android_usb/android0/functions ${sys.usb.config}
+    write /sys/class/android_usb/android0/enable 1
 
-    # Create rndis function
-    mkdir /config/usb_gadget/g1/functions/rndis.gs4
+on property:sys.usb.config=mtp,adb
+    write /sys/class/android_usb/android0/enable 0
+    write /sys/class/android_usb/android0/functions ${sys.usb.config}
+    write /sys/class/android_usb/android0/enable 1
+    start adbd
 
-on boot
-    setprop sys.usb.configfs 1
-    #Replace "ci_hdrc.0" with your platform UDC driver as found in /sys/class/udc/
-    setprop sys.usb.controller ci_hdrc.0
+on property:sys.usb.config=adb
+    write /sys/class/android_usb/android0/enable 0
+    write /sys/class/android_usb/android0/functions ${sys.usb.config}
+    write /sys/class/android_usb/android0/enable ${service.adb.root}
+    start adbd
