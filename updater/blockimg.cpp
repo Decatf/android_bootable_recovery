@@ -554,6 +554,13 @@ static void DeleteStash(const std::string& base) {
             fprintf(stderr, "rmdir \"%s\" failed: %s\n", dirname.c_str(), strerror(errno));
         }
     }
+
+    std::string base_dirname(STASH_DIRECTORY_BASE);
+    if (rmdir(base_dirname.c_str()) == -1) {
+        if (errno != ENOENT && errno != ENOTDIR) {
+          fprintf(stderr, "rmdir \"%s\" failed: %s\n", base_dirname.c_str(), strerror(errno));
+        }
+    }
 }
 
 static int LoadStash(CommandParameters& params, const std::string& base, const std::string& id,
@@ -724,9 +731,34 @@ static int CreateStash(State* state, int maxblocks, const char* blockdev, std::s
     SHA1(reinterpret_cast<const uint8_t*>(blockdev), strlen(blockdev), digest);
     base = print_sha1(digest);
 
-    std::string dirname = GetStashFileName(base, "", "");
     struct stat sb;
-    int res = stat(dirname.c_str(), &sb);
+    int res;
+    std::string base_dirname(STASH_DIRECTORY_BASE);
+    res = stat(base_dirname.c_str(), &sb);
+
+    if (res == -1 && errno != ENOENT) {
+        ErrorAbort(state, kStashCreationFailure, "stat \"%s\" failed: %s\n",
+                   base_dirname.c_str(), strerror(errno));
+        return -1;
+    } else if (res != 0) {
+        fprintf(stderr, "creating base directory %s\n", base_dirname.c_str());
+        res = mkdir(base_dirname.c_str(), STASH_DIRECTORY_MODE);
+
+        if (res != 0) {
+            ErrorAbort(state, kStashCreationFailure, "mkdir \"%s\" failed: %s\n",
+                       base_dirname.c_str(), strerror(errno));
+            return -1;
+        }
+
+        if (chown(base_dirname.c_str(), AID_SYSTEM, AID_SYSTEM) != 0) {  // system user
+            ErrorAbort(state, kStashCreationFailure, "chown \"%s\" failed: %s\n",
+                base_dirname.c_str(), strerror(errno));
+            return -1;
+        }
+    }
+
+    std::string dirname = GetStashFileName(base, "", "");
+    res = stat(dirname.c_str(), &sb);
 
     if (res == -1 && errno != ENOENT) {
         ErrorAbort(state, kStashCreationFailure, "stat \"%s\" failed: %s\n",
