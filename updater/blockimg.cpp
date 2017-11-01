@@ -626,6 +626,14 @@ static void DeleteStash(const std::string& base) {
       PLOG(ERROR) << "rmdir \"" << dirname << "\" failed";
     }
   }
+
+  std::string base_dirname(STASH_DIRECTORY_BASE);
+
+  if (rmdir(base_dirname.c_str()) == -1) {
+    if (errno != ENOENT && errno != ENOTDIR) {
+      PLOG(ERROR) << "rmdir \"" << base_dirname << "\" failed";
+    }
+  }
 }
 
 static int LoadStash(CommandParameters& params, const std::string& id, bool verify, size_t* blocks,
@@ -797,9 +805,34 @@ static int CreateStash(State* state, size_t maxblocks, const std::string& blockd
   SHA1(reinterpret_cast<const uint8_t*>(blockdev.data()), blockdev.size(), digest);
   base = print_sha1(digest);
 
-  std::string dirname = GetStashFileName(base, "", "");
   struct stat sb;
-  int res = stat(dirname.c_str(), &sb);
+  int res;
+  std::string base_dirname(STASH_DIRECTORY_BASE);
+  res = stat(base_dirname.c_str(), &sb);
+
+  if (res == -1 && errno != ENOENT) {
+    ErrorAbort(state, kStashCreationFailure, "stat \"%s\" failed: %s\n", base_dirname.c_str(),
+               strerror(errno));
+    return -1;
+  } else if (res != 0) {
+    LOG(INFO) << "creating stash base directory " << base_dirname;
+    res = mkdir(base_dirname.c_str(), STASH_DIRECTORY_MODE);
+
+    if (res != 0) {
+      ErrorAbort(state, kStashCreationFailure, "mkdir \"%s\" failed: %s\n", base_dirname.c_str(),
+                 strerror(errno));
+      return -1;
+    }
+
+    if (chown(base_dirname.c_str(), AID_SYSTEM, AID_SYSTEM) != 0) {  // system user
+      ErrorAbort(state, kStashCreationFailure, "chown \"%s\" failed: %s\n", base_dirname.c_str(),
+                 strerror(errno));
+      return -1;
+    }
+  }
+
+  std::string dirname = GetStashFileName(base, "", "");
+  res = stat(dirname.c_str(), &sb);
   size_t max_stash_size = maxblocks * BLOCKSIZE;
 
   if (res == -1 && errno != ENOENT) {
