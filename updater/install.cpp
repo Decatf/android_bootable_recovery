@@ -772,29 +772,29 @@ static int ApplyParsedPerms(State* state, const char* filename, const struct sta
     }
   }
 
-  if (parsed.has_capabilities && S_ISREG(statptr->st_mode)) {
-    if (parsed.capabilities == 0) {
-      if ((removexattr(filename, XATTR_NAME_CAPS) == -1) && (errno != ENODATA)) {
-        // Report failure unless it's ENODATA (attribute not set)
-        uiPrintf(state, "ApplyParsedPerms: removexattr of %s to %" PRIx64 " failed: %s\n", filename,
-                 parsed.capabilities, strerror(errno));
-        bad++;
-      }
-    } else {
-      struct vfs_cap_data cap_data;
-      memset(&cap_data, 0, sizeof(cap_data));
-      cap_data.magic_etc = VFS_CAP_REVISION | VFS_CAP_FLAGS_EFFECTIVE;
-      cap_data.data[0].permitted = (uint32_t)(parsed.capabilities & 0xffffffff);
-      cap_data.data[0].inheritable = 0;
-      cap_data.data[1].permitted = (uint32_t)(parsed.capabilities >> 32);
-      cap_data.data[1].inheritable = 0;
-      if (setxattr(filename, XATTR_NAME_CAPS, &cap_data, sizeof(cap_data), 0) < 0) {
-        uiPrintf(state, "ApplyParsedPerms: setcap of %s to %" PRIx64 " failed: %s\n", filename,
-                 parsed.capabilities, strerror(errno));
-        bad++;
-      }
-    }
-  }
+  // if (parsed.has_capabilities && S_ISREG(statptr->st_mode)) {
+  //   if (parsed.capabilities == 0) {
+  //     if ((removexattr(filename, XATTR_NAME_CAPS) == -1) && (errno != ENODATA)) {
+  //       // Report failure unless it's ENODATA (attribute not set)
+  //       uiPrintf(state, "ApplyParsedPerms: removexattr of %s to %" PRIx64 " failed: %s\n", filename,
+  //                parsed.capabilities, strerror(errno));
+  //       bad++;
+  //     }
+  //   } else {
+  //     struct vfs_cap_data cap_data;
+  //     memset(&cap_data, 0, sizeof(cap_data));
+  //     cap_data.magic_etc = VFS_CAP_REVISION | VFS_CAP_FLAGS_EFFECTIVE;
+  //     cap_data.data[0].permitted = (uint32_t)(parsed.capabilities & 0xffffffff);
+  //     cap_data.data[0].inheritable = 0;
+  //     cap_data.data[1].permitted = (uint32_t)(parsed.capabilities >> 32);
+  //     cap_data.data[1].inheritable = 0;
+  //     if (setxattr(filename, XATTR_NAME_CAPS, &cap_data, sizeof(cap_data), 0) < 0) {
+  //       uiPrintf(state, "ApplyParsedPerms: setcap of %s to %" PRIx64 " failed: %s\n", filename,
+  //                parsed.capabilities, strerror(errno));
+  //       bad++;
+  //     }
+  //   }
+  // }
 
   return bad;
 }
