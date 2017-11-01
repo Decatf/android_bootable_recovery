@@ -63,7 +63,7 @@
 #define DEBUG_ERASE  0
 
 static constexpr size_t BLOCKSIZE = 4096;
-static constexpr const char* STASH_DIRECTORY_BASE = "/cache/recovery";
+static constexpr const char* STASH_DIRECTORY_BASE = "/data/recovery";
 static constexpr mode_t STASH_DIRECTORY_MODE = 0700;
 static constexpr mode_t STASH_FILE_MODE = 0600;
 
