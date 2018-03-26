@@ -750,7 +750,7 @@ static int CreateStash(State* state, int maxblocks, const char* blockdev, std::s
             return -1;
         }
 
-        if (chown(base_dirname.c_str(), AID_SYSTEM, AID_SYSTEM) != 0) {  // system user
+        if (chown(base_dirname.c_str(), 1000 /* AID_SYSTEM */, 1000 /* AID_SYSTEM */) != 0) {  // system user
             ErrorAbort(state, kStashCreationFailure, "chown \"%s\" failed: %s\n",
                 base_dirname.c_str(), strerror(errno));
             return -1;
